@@ -1,0 +1,255 @@
+# services:
+
+#   # ==========================================================
+#   # PRIMARY API
+#   # ==========================================================
+
+#   primary:
+#     build:
+#       context: ./primary-api
+
+#     container_name: primary
+
+#     ports:
+#       - "8081:8081"
+
+#     expose:
+#       - "8081"
+
+#     networks:
+#       - app-network
+
+
+#   # ==========================================================
+#   # SECONDARY API
+#   # ==========================================================
+
+#   secondary:
+#     build:
+#       context: ./secondary-api
+
+#     container_name: secondary
+
+#     ports:
+#       - "8082:8082"
+
+#     expose:
+#       - "8082"
+
+#     networks:
+#       - app-network
+
+
+#   # ==========================================================
+#   # TOXIPROXY
+#   # ==========================================================
+
+#   toxiproxy:
+#     image: shopify/toxiproxy
+
+#     container_name: toxiproxy
+
+#     ports:
+#       - "8474:8474"
+#       - "8666:8666"
+
+#     networks:
+#       - app-network
+
+#     depends_on:
+#       - primary
+
+
+#   # ==========================================================
+#   # GO BACKEND
+#   # ==========================================================
+
+#   backend:
+#     build:
+#       context: ./backend
+
+#     container_name: backend
+
+#     ports:
+#       - "8080:8080"
+
+#     networks:
+#       - app-network
+
+#     depends_on:
+#       - toxiproxy
+#       - secondary
+
+
+#   # ==========================================================
+#   # REACT FRONTEND
+#   # ==========================================================
+
+#   frontend:
+#     build:
+#       context: ./frontend
+
+#     container_name: frontend
+
+#     ports:
+#       - "5173:5173"
+
+#     networks:
+#       - app-network
+
+#     depends_on:
+#       - backend
+
+
+# # ============================================================
+# # NETWORK
+# # ============================================================
+
+# networks:
+
+#   app-network:
+#     driver: bridge
+
+
+services:
+
+  # ==========================================================
+  # PRIMARY API
+  # ==========================================================
+
+  primary:
+    build:
+      context: ./primary-api
+
+    container_name: primary
+
+    ports:
+      - "8081:8081"
+
+    expose:
+      - "8081"
+
+    networks:
+      - app-network
+
+
+  # ==========================================================
+  # SECONDARY API
+  # ==========================================================
+
+  secondary:
+    build:
+      context: ./secondary-api
+
+    container_name: secondary
+
+    ports:
+      - "8082:8082"
+
+    expose:
+      - "8082"
+
+    networks:
+      - app-network
+
+
+  # ==========================================================
+  # TOXIPROXY
+  # ==========================================================
+
+  toxiproxy:
+    image: shopify/toxiproxy
+
+    container_name: toxiproxy
+
+    ports:
+      - "8474:8474"
+      - "8666:8666"
+
+    networks:
+      - app-network
+
+    depends_on:
+      - primary
+
+
+  # ==========================================================
+  # TOXIPROXY INITIALIZATION
+  # Creates Primary proxy and adds 500ms latency
+  # ==========================================================
+
+  toxiproxy-init:
+    image: curlimages/curl:latest
+
+    container_name: toxiproxy-init
+
+    depends_on:
+      - toxiproxy
+      - primary
+
+    networks:
+      - app-network
+
+    entrypoint: >
+      sh -c "
+      sleep 5 &&
+      curl -X POST http://toxiproxy:8474/proxies
+      -H 'Content-Type: application/json'
+      -d '{\"name\":\"primary\",\"listen\":\"0.0.0.0:8666\",\"upstream\":\"primary:8081\",\"enabled\":true}' &&
+      sleep 2 &&
+      curl -X POST http://toxiproxy:8474/proxies/primary/toxics
+      -H 'Content-Type: application/json'
+      -d '{\"name\":\"latency\",\"type\":\"latency\",\"attributes\":{\"latency\":500}}'
+      "
+
+
+  # ==========================================================
+  # GO BACKEND
+  # ==========================================================
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: backend
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      - app-network
+
+    depends_on:
+      - toxiproxy
+      - toxiproxy-init
+      - secondary
+
+
+  # ==========================================================
+  # REACT FRONTEND
+  # ==========================================================
+
+  frontend:
+    build:
+      context: ./frontend
+
+    container_name: frontend
+
+    ports:
+      - "5173:5173"
+
+    networks:
+      - app-network
+
+    depends_on:
+      - backend
+
+
+  # ==========================================================
+  # NETWORK
+  # ==========================================================
+
+networks:
+
+  app-network:
+    driver: bridge
