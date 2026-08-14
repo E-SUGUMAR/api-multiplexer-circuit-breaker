@@ -13,6 +13,117 @@ h1 {
   margin-bottom: 30px;
 }
 
+/* ============================================================
+   STATUS BANNER
+   ============================================================ */
+
+.status-banner {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+}
+
+.circuit-indicator,
+.route-indicator {
+  min-width: 220px;
+  padding: 18px 24px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 2px solid transparent;
+
+  /* Same purple card color */
+  background: rgb(77, 3, 111);
+
+  box-shadow: 0 2px 10px rgba(107, 2, 70, 0.15);
+}
+
+.circuit-indicator {
+  flex-direction: row;
+}
+
+.circuit-indicator > div,
+.route-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* ============================================================
+   INDICATOR DOT
+   ============================================================ */
+
+.indicator-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ============================================================
+   CIRCUIT BREAKER STATES
+   ============================================================ */
+
+/* CLOSED */
+
+.circuit-indicator.closed {
+  border-color: #22c55e;
+}
+
+.circuit-indicator.closed .indicator-dot {
+  background: #22c55e;
+}
+
+/* OPEN */
+
+.circuit-indicator.open {
+  border-color: #ef4444;
+}
+
+.circuit-indicator.open .indicator-dot {
+  background: #ef4444;
+}
+
+/* HALF-OPEN */
+
+.circuit-indicator.half-open {
+  border-color: #f59e0b;
+}
+
+.circuit-indicator.half-open .indicator-dot {
+  background: #f59e0b;
+}
+
+/* ============================================================
+   ACTIVE ROUTE
+   ============================================================ */
+
+/* PRIMARY */
+
+.route-indicator.primary {
+  border-color: #3b82f6;
+}
+
+/* SECONDARY / FALLBACK */
+
+.route-indicator.secondary {
+  border-color: #f59e0b;
+}
+
+/* ============================================================
+   REQUEST STATISTICS
+   ============================================================ */
+
+.stats {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+
 .card {
   background: rgb(77, 3, 111);
   width: 350px;

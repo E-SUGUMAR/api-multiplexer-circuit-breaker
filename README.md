@@ -1,430 +1,825 @@
-# API Multiplexer with Circuit Breaker
+# 🚀 Fault-Tolerant API Multiplexer
 
-A fault-tolerant API multiplexer built using **Go, React, Docker, and Toxiproxy**.
+A production-style **fault-tolerant API routing system** built using **Go, React, WebSocket, Docker Compose, Toxiproxy, and Circuit Breaker patterns**.
 
-The system routes requests through a Primary API and automatically falls back to a Secondary API when the Primary API becomes slow or unavailable. A Circuit Breaker prevents repeated requests to the failing Primary API and allows recovery testing after a configured timeout.
+The system routes requests through a Primary API under normal conditions and automatically falls back to a Secondary API when the Primary API becomes slow or unreliable.
 
-## Architecture
+It also provides a real-time React dashboard using WebSocket communication to monitor the circuit state, active route, request count, and system performance.
+
+---
+
+# 📌 Project Overview
+
+The project demonstrates how to build a resilient API architecture capable of handling:
+
+* Primary API failures
+* Network latency
+* Partial failures
+* Automatic failover
+* Circuit breaker state transitions
+* Service recovery
+* Real-time monitoring
+* Resource-constrained backend execution
+
+The architecture uses **Toxiproxy** to introduce controlled network failures and latency without modifying the Primary API itself.
+
+---
+
+# 🏗️ Architecture
 
 ```text
-                    ┌─────────────────┐
-                    │  React Frontend │
-                    │   Port: 5173    │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │   Go Backend    │
-                    │   Port: 8080    │
-                    │                 │
-                    │ Circuit Breaker │
-                    └───────┬─────────┘
-                            │
-                 ┌──────────┴──────────┐
-                 │                     │
-                 ▼                     ▼
-        ┌─────────────────┐   ┌─────────────────┐
-        │   Toxiproxy     │   │ Secondary API   │
-        │    :8666        │   │    :8082        │
-        └────────┬────────┘   └─────────────────┘
-                 │
-                 ▼
-        ┌─────────────────┐
-        │   Primary API   │
-        │    :8081        │
-        └─────────────────┘
+                         ┌──────────────────────┐
+                         │    React Dashboard   │
+                         │      Port 5173       │
+                         └──────────┬───────────┘
+                                    │
+                              WebSocket
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │     Go Multiplexer    │
+                         │      Port 8080        │
+                         │                      │
+                         │   Circuit Breaker    │
+                         └──────────┬───────────┘
+                                    │
+                         ┌──────────┴──────────┐
+                         │                     │
+                         ▼                     ▼
+                ┌──────────────────┐   ┌──────────────────┐
+                │    Toxiproxy     │   │  Secondary API   │
+                │    Port 8666     │   │    Port 8082     │
+                └────────┬─────────┘   └──────────────────┘
+                         │
+                         ▼
+                ┌──────────────────┐
+                │    Primary API   │
+                │    Port 8081     │
+                └──────────────────┘
+```
 
-Request Flow
+---
 
-Under normal conditions:
+# 🧩 Components
 
-    Frontend
-       ↓
-    Go Backend
-       ↓
-    Toxiproxy
-       ↓
-    Primary API
+| Component       | Technology  |   Port | Purpose                     |
+| --------------- | ----------- | -----: | --------------------------- |
+| Primary API     | API Service | `8081` | Main request handler        |
+| Secondary API   | API Service | `8082` | Backup/fallback service     |
+| API Multiplexer | Go          | `8080` | Routing and circuit breaker |
+| Toxiproxy       | Toxiproxy   | `8666` | Primary API network proxy   |
+| Toxiproxy API   | Toxiproxy   | `8474` | Chaos configuration         |
+| Dashboard       | React       | `5173` | Real-time monitoring        |
+| Communication   | WebSocket   |      — | Real-time dashboard updates |
 
-When the Primary API fails or exceeds the timeout:
+---
 
-    Frontend
-       ↓
-    Go Backend
-       ↓
-    Primary fails
-       ↓
-    Circuit Breaker records failure
-       ↓
-    Secondary API
+# ✅ Completed Features
 
-When the Circuit Breaker is OPEN:
+The project successfully implements all required functionality:
 
-    Frontend
-       ↓
-    Go Backend
-       ↓
-    Circuit OPEN
-       ↓
-    Secondary API
+1. ✅ Primary API
+2. ✅ Secondary API
+3. ✅ Go API Multiplexer
+4. ✅ Circuit Breaker
+5. ✅ `CLOSED → OPEN → HALF-OPEN → CLOSED`
+6. ✅ Primary API through Toxiproxy
+7. ✅ Secondary API direct
+8. ✅ 500 ms latency chaos test
+9. ✅ 20% failure scenario
+10. ✅ Automatic fallback
+11. ✅ Automatic recovery
+12. ✅ React dashboard
+13. ✅ WebSocket communication
+14. ✅ Docker Compose
+15. ✅ 128 MB backend memory limit
+16. ✅ Final cleanup
+17. ✅ End-to-end fault-tolerance testing
 
-Important: Toxiproxy is used only for the Primary API. The Secondary API is accessed directly and does not pass through Toxiproxy.
+---
 
-Technologies Used
-   1. Go - API multiplexer and circuit breaker
-   2. React - Monitoring dashboard
-   3. Docker - Containerization
-   4. Docker Compose - Multi-container orchestration
-   5. Toxiproxy - Network fault and latency injection
-   6. Node.js / npm - React frontend
-   7. PowerShell / curl - API and Toxiproxy testing
+# 🔀 Request Routing
 
-Project Structure
+## Normal Operation
 
-ForntEnd_Project/
-│
-├── backend/
-│   ├── Dockerfile
-│   ├── go.mod
-│   └── main.go
-│
-├── frontend/
-│   ├── Dockerfile
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── src/
-│   └── public/
-│
-├── primary-api/
-│   ├── Dockerfile
-│   ├── go.mod
-│   └── main.go
-│
-├── secondary-api/
-│   ├── Dockerfile
-│   ├── go.mod
-│   └── main.go
-│
-├── docker-compose.yml
-├── .gitignore
-└── README.md
+Under normal conditions, requests follow:
 
-Configuration
-
-The current backend configuration uses:
-
-| Configuration           |        Value |
-| ----------------------- | -----------: |
-| Backend                 |       `8080` |
-| Primary API             |       `8081` |
-| Secondary API           |       `8082` |
-| Toxiproxy API           |       `8474` |
-| Toxiproxy Primary Proxy |       `8666` |
-| Primary timeout         |     `200 ms` |
-| Failure threshold       | `3` failures |
-| Recovery timeout        |  `5 seconds` |
-| Test latency            |     `500 ms` |
-
+```text
+Client
+  │
+  ▼
+Go API Multiplexer
+  │
+  ▼
 Circuit Breaker
-
-The backend uses three circuit breaker states.
-
-1. CLOSED
-
-Normal operating state.
-
-Requests are sent to the Primary API through Toxiproxy.
-
-    Backend
-       ↓
-    Toxiproxy
-       ↓
-    Primary API
-
-A successful Primary request resets the failure counter.
-
-2. OPEN
-
-The Circuit Breaker enters the OPEN state after 3 Primary failures.
-
-Once OPEN, requests do not attempt the Primary API.
-
-Instead:
-
-    Backend
-       ↓
-    Secondary API
-
-This prevents repeatedly sending requests to a failing Primary API.
-
-3. HALF-OPEN
-
-After the configured 5-second recovery period, the Circuit Breaker allows a request to test the Primary API again.
-
-If the Primary succeeds:
-
-    HALF-OPEN
-       ↓
-    Primary succeeds
-       ↓
-    CLOSED
-
-If the Primary fails:
-
-    HALF-OPEN
-        ↓
-    Primary fails
-        ↓
-    OPEN
-
+  │
+  ▼
 Toxiproxy
+  │
+  ▼
+Primary API
+```
 
-Toxiproxy is used to simulate network problems for the Primary API.
+The Primary API is the preferred route.
 
-The Primary route is:
+```text
+Active Route: PRIMARY
+Circuit: CLOSED
+```
 
-    Go Backend
-        ↓
-    Toxiproxy :8666
-        ↓
-    Primary API :8081
+---
 
-The Secondary API does not use Toxiproxy:
+# 🔥 Circuit Breaker
 
-    Go Backend
-        ↓
-    Secondary API :8082
+The Go backend implements a three-state Circuit Breaker:
 
-500 ms Latency
+```text
+             ┌───────────────┐
+             │    CLOSED     │
+             └───────┬───────┘
+                     │
+              Failure threshold
+                     │
+                     ▼
+             ┌───────────────┐
+             │     OPEN      │
+             └───────┬───────┘
+                     │
+               Recovery time
+                     │
+                     ▼
+             ┌───────────────┐
+             │   HALF-OPEN   │
+             └───────┬───────┘
+                     │
+              Test Primary API
+                │          │
+             Success      Failure
+                │          │
+                ▼          ▼
+             CLOSED       OPEN
+```
 
-A 500 ms latency toxic can be applied to the Primary proxy.
+---
 
-Because the backend Primary request timeout is configured to:
+# 🟢 CLOSED State
 
-200 ms
+The system starts in:
 
-the Primary request can exceed the timeout and be treated as a failure.
+```text
+CLOSED
+```
 
-This allows the circuit breaker and fallback mechanism to be tested.
+Requests are routed to:
 
-Running the Project
+```text
+Primary API
+```
 
-Make sure Docker Desktop is running.
+Traffic flow:
 
-Open a terminal in the project root:
+```text
+Go Backend
+     │
+     ▼
+Toxiproxy
+     │
+     ▼
+Primary API
+```
 
-cd "E:\Data_Science\Data_Support_Intern\Intern_ML_Task\Course_Videos\ForntEnd_Project"
+---
 
-Start the complete application:
+# 🔴 OPEN State
 
-docker compose up --build
+When the Primary API continuously fails or exceeds the configured timeout, the failure counter increases.
 
-The following services are started:
+After reaching the configured failure threshold:
 
-primary
-secondary
-toxiproxy
-toxiproxy-init
-backend
-frontend
+```text
+CLOSED
+   ↓
+OPEN
+```
 
-Check Containers
+The Primary API is temporarily bypassed.
 
-Open another terminal in the project directory and run:
+Requests are immediately sent to:
 
-docker compose ps
+```text
+Secondary API
+```
 
-You should see the application containers running.
+Traffic flow:
 
-View Backend Logs
+```text
+Go Backend
+     │
+     ▼
+Secondary API
+```
 
-Run:
+This prevents repeated requests from continuously hitting an unhealthy Primary API.
 
-docker compose logs -f backend
+---
 
-The backend displays information about:
+# 🟡 HALF-OPEN State
 
-   1. Primary requests
-   2. Primary failures
-   3. Circuit Breaker state
-   4. Secondary fallback
-   5. Routing decisions
+After the configured recovery period, the Circuit Breaker enters:
+
+```text
+HALF-OPEN
+```
+
+The system allows a test request to determine whether the Primary API has recovered.
+
+### Successful Test
+
+```text
+HALF-OPEN
+    ↓
+Primary API successful
+    ↓
+CLOSED
+```
+
+Traffic returns to the Primary API.
+
+### Failed Test
+
+```text
+HALF-OPEN
+    ↓
+Primary API failed
+    ↓
+OPEN
+```
+
+Traffic continues through the Secondary API.
+
+---
+
+# 🌐 Toxiproxy
+
+The Primary API is accessed through Toxiproxy.
+
+```text
+Go Backend
+     │
+     ▼
+Toxiproxy :8666
+     │
+     ▼
+Primary API :8081
+```
+
+The Secondary API does **not** use Toxiproxy.
+
+```text
+Go Backend
+     │
+     ▼
+Secondary API :8082
+```
+
+This allows the Primary API to be intentionally degraded while keeping the Secondary API healthy.
+
+---
+
+# 🌪️ Chaos Testing
+
+Toxiproxy is used to simulate real-world network problems.
+
+Two important chaos scenarios were implemented.
+
+---
+
+## 1. 500 ms Latency Test
+
+A `500 ms` latency condition is introduced between the Go backend and Primary API.
+
+```text
+Request
+   │
+   ▼
+Go Backend
+   │
+   ▼
+Toxiproxy
+   │
+   │ 500 ms delay
+   ▼
+Primary API
+```
+
+The latency causes the Primary API request to exceed the backend timeout.
+
+The Circuit Breaker detects the failure and eventually switches traffic to the Secondary API.
+
+---
+
+# 📉 20% Failure Scenario
+
+A separate chaos scenario introduces approximately:
+
+```text
+20% failure rate
+```
+
+This simulates intermittent Primary API failures rather than a complete outage.
+
+The purpose is to verify that the multiplexer can handle partial/unreliable failures while maintaining service availability through the fallback mechanism.
+
+---
+
+# 🔄 Automatic Fallback
+
+When the Primary API becomes unhealthy:
+
+```text
+Primary API
+     │
+     X
+     │
+     ▼
+Circuit Breaker
+     │
+     ▼
+Secondary API
+```
+
+No manual route change is required.
+
+The Go multiplexer automatically changes the active route.
 
 Example:
 
-Routing request → Primary through Toxiproxy
-Primary Failed
-Primary failure count: 1/3
-Primary failed → Routing directly to Secondary
-Secondary request successful
+```text
+Active Route: PRIMARY
+```
 
-After three failures:
+changes to:
 
-Primary failure count: 3/3
-Circuit Breaker → OPEN
-Circuit OPEN → Routing directly to Secondary
+```text
+Active Route: SECONDARY
+```
 
-Test the Backend
+---
 
-The backend is available at:
+# ♻️ Automatic Recovery
 
-http://localhost:8080
+Once the Primary API becomes healthy again:
 
-Using PowerShell:
-
-curl.exe http://localhost:8080
-
-When the Primary API is healthy, the response should come from the Primary API.
-
-When the Primary API is delayed beyond the configured timeout, the backend falls back to the Secondary API.
-
-Check Circuit Breaker Status
-
-The backend exposes:
-
-http://localhost:8080/status
-
-Test it with:
-
-curl.exe http://localhost:8080/status
-
-The response contains:
-
-{
-  "circuit": "CLOSED",
-  "activeRoute": "PRIMARY",
-  "requests": 10,
-  "rps": 1
-}
-
-Possible circuit states are:
-
-CLOSED
+```text
 OPEN
+  ↓
 HALF-OPEN
-
-Possible active routes are:
-
+  ↓
+Primary health test
+  ↓
+Successful
+  ↓
+CLOSED
+  ↓
 PRIMARY
-SECONDARY
+```
 
-Test Toxiproxy
+The system automatically returns traffic to the Primary API.
 
-Check the configured Primary proxy:
+No restart is required.
 
-curl.exe http://localhost:8474/proxies
+---
 
-The Primary proxy should point to:
+# 🖥️ React Dashboard
 
-listen: 8666
-upstream: primary:8081
+The React dashboard provides real-time visibility into the system.
 
-When latency is configured, the proxy should contain a latency toxic similar to:
+The dashboard displays information such as:
 
-latency: 500 ms
+* Circuit Breaker state
+* Active API route
+* Total request count
+* Requests per second
+* Current system status
 
-Fault Injection Test
+Example:
 
-To test the circuit breaker:
+```text
+┌─────────────────────────────────────────┐
+│          API MULTIPLEXER                │
+├─────────────────────────────────────────┤
+│                                         │
+│ Circuit:       CLOSED                   │
+│ Active Route:  PRIMARY                  │
+│ Requests:      1250                     │
+│ RPS:           10                       │
+│                                         │
+└─────────────────────────────────────────┘
+```
 
-Step 1 - Enable 500 ms latency
+---
 
-Configure a 500 ms latency toxic on the Primary Toxiproxy route.
+# ⚡ WebSocket Communication
 
-Step 2 - Send requests
+The dashboard uses **WebSocket communication** for real-time status updates.
 
-Run:
+Instead of repeatedly polling the backend for status information, the backend can push updated information to connected clients.
 
-curl.exe http://localhost:8080
+```text
+Go Backend
+     │
+     │ WebSocket
+     ▼
+React Dashboard
+```
 
-multiple times.
+This allows the dashboard to immediately reflect:
 
-Step 3 - Observe the backend logs
-
-The Primary request should exceed the 200 ms timeout.
-
-The backend should record Primary failures:
-
-Primary failure count: 1/3
-Primary failure count: 2/3
-Primary failure count: 3/3
-
-After the third failure:
-
-Circuit Breaker → OPEN
-
-The backend then routes requests directly to:
-
-Secondary API :8082
-Step 4 - Wait for recovery
-
-After approximately 5 seconds, the Circuit Breaker enters:
-
+```text
+CLOSED
+   ↓
+OPEN
+   ↓
 HALF-OPEN
+   ↓
+CLOSED
+```
 
-A Primary request is then used to test whether the Primary API has recovered.
+and route changes:
 
-Frontend Dashboard
+```text
+PRIMARY
+   ↓
+SECONDARY
+   ↓
+PRIMARY
+```
 
-The React frontend runs on:
+---
 
-http://localhost:5173
+# 🐳 Docker Compose
 
-The dashboard communicates with the Go backend and displays information such as:
+All application components are containerized and managed using Docker Compose.
 
-Circuit Breaker state
-Active route
-Request count
-Requests per second
+The project contains separate services for:
 
-The frontend obtains status information from:
+```text
+Primary API
+Secondary API
+Go Backend
+React Frontend
+Toxiproxy
+```
 
-http://localhost:8080/status
+The entire environment can be started together using:
 
-Docker Services
-
-The Docker Compose setup contains:
-
-| Service          | Purpose                         |           Port |
-| ---------------- | ------------------------------- | -------------: |
-| `frontend`       | React dashboard                 |         `5173` |
-| `backend`        | Go API multiplexer              |         `8080` |
-| `primary`        | Primary API                     |         `8081` |
-| `secondary`      | Secondary API                   |         `8082` |
-| `toxiproxy`      | Primary fault injection         | `8474`, `8666` |
-| `toxiproxy-init` | Initial Toxiproxy configuration |              - |
-
-Stopping the Application
-
-To stop the running Docker Compose application:
-
-docker compose down
-
-To stop and remove the containers:
-
-docker compose down
-
-To rebuild the project after making code changes:
-
+```powershell
 docker compose up --build
+```
 
-GitHub
+---
 
-Repository:
+# 💾 Backend Memory Limit
 
-api-multiplexer-circuit-breaker
+The Go backend container is configured with a memory limit of:
 
-This project demonstrates API routing, fault tolerance, circuit breaker behavior, network latency simulation, automatic failover, and containerized application deployment.
+```text
+128 MB
+```
 
-Future Improvements
+This demonstrates that the backend can operate under a controlled resource constraint.
 
-Possible future improvements include:
+The resource configuration is managed through Docker Compose.
 
-    1. More detailed monitoring metrics
-    2. Retry policies
-    3. Configurable circuit breaker parameters
-    4. Health-check endpoints
-    5. Prometheus metrics
-    6. Grafana monitoring
-    7. Additional Toxiproxy failure scenarios
-    8. Improved frontend visualization
+---
+
+# 📁 Project Structure
+
+```text
+FrontEnd_Project/
+│
+├── backend/
+│   ├── main.go
+│   ├── go.mod
+│   └── Dockerfile
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── App.css
+│   │   └── ...
+│   ├── package.json
+│   └── Dockerfile
+│
+├── primary-api/
+│   ├── ...
+│   └── Dockerfile
+│
+├── secondary-api/
+│   ├── ...
+│   └── Dockerfile
+│
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+# ▶️ Running the Project
+
+## 1. Start the Complete Application
+
+From the project root:
+
+```powershell
+docker compose up --build
+```
+
+---
+
+## 2. Run in Background
+
+```powershell
+docker compose up -d
+```
+
+---
+
+## 3. Check Containers
+
+```powershell
+docker compose ps
+```
+
+---
+
+## 4. Open the React Dashboard
+
+```text
+http://localhost:5173
+```
+
+---
+
+## 5. Check Backend
+
+```text
+http://localhost:8080
+```
+
+---
+
+## 6. Check Backend Status
+
+```text
+http://localhost:8080/status
+```
+
+---
+
+# 🧪 Testing
+
+## Test Normal Operation
+
+Send a request:
+
+```powershell
+curl.exe http://localhost:8080
+```
+
+Expected behavior:
+
+```text
+Backend
+   ↓
+Toxiproxy
+   ↓
+Primary API
+```
+
+Circuit:
+
+```text
+CLOSED
+```
+
+Route:
+
+```text
+PRIMARY
+```
+
+---
+
+# 🧪 Test 500 ms Latency
+
+Add latency through Toxiproxy:
+
+```powershell
+curl.exe -X POST "http://localhost:8474/proxies/primary/toxics" -H "Content-Type: application/json" -d '{"name":"latency","type":"latency","attributes":{"latency":500}}'
+```
+
+Verify:
+
+```powershell
+curl.exe http://localhost:8474/proxies
+```
+
+The Primary proxy should contain the latency toxic.
+
+---
+
+# 🧪 Test Failover
+
+Send multiple requests:
+
+```powershell
+curl.exe http://localhost:8080
+```
+
+The Primary API should begin failing because of the injected latency.
+
+The Circuit Breaker eventually transitions:
+
+```text
+CLOSED
+   ↓
+OPEN
+```
+
+The backend automatically routes requests to:
+
+```text
+SECONDARY
+```
+
+---
+
+# 🧪 Test Recovery
+
+Remove the latency toxic:
+
+```powershell
+curl.exe -X DELETE "http://localhost:8474/proxies/primary/toxics/latency"
+```
+
+Verify:
+
+```powershell
+curl.exe http://localhost:8474/proxies
+```
+
+After the recovery period:
+
+```text
+OPEN
+   ↓
+HALF-OPEN
+   ↓
+Primary test successful
+   ↓
+CLOSED
+```
+
+Traffic returns to:
+
+```text
+PRIMARY
+```
+
+---
+
+# 🧹 Cleanup
+
+Stop all containers:
+
+```powershell
+docker compose down
+```
+
+Remove containers and associated resources when required:
+
+```powershell
+docker compose down --remove-orphans
+```
+
+The project has been cleaned up after testing so that the final environment contains only the required configuration.
+
+---
+
+# 📊 Final System Behavior
+
+The complete fault-tolerance cycle is:
+
+```text
+                  ┌──────────────┐
+                  │   PRIMARY    │
+                  │    HEALTHY   │
+                  └──────┬───────┘
+                         │
+                         ▼
+                     CLOSED
+                         │
+                 Primary failure
+                         │
+                         ▼
+                       OPEN
+                         │
+                 Automatic fallback
+                         │
+                         ▼
+                    SECONDARY
+                         │
+                 Recovery period
+                         │
+                         ▼
+                    HALF-OPEN
+                         │
+                  Test Primary
+                    /       \
+                   /         \
+              Success       Failure
+                 │             │
+                 ▼             ▼
+              CLOSED          OPEN
+                 │
+                 ▼
+              PRIMARY
+```
+
+---
+
+# 🎯 Project Goals Achieved
+
+| Requirement                        | Status |
+| ---------------------------------- | :----: |
+| Primary API                        |    ✅   |
+| Secondary API                      |    ✅   |
+| Go API Multiplexer                 |    ✅   |
+| Circuit Breaker                    |    ✅   |
+| CLOSED → OPEN → HALF-OPEN → CLOSED |    ✅   |
+| Primary through Toxiproxy          |    ✅   |
+| Secondary direct                   |    ✅   |
+| 500 ms latency chaos test          |    ✅   |
+| 20% failure scenario               |    ✅   |
+| Automatic fallback                 |    ✅   |
+| Automatic recovery                 |    ✅   |
+| React dashboard                    |    ✅   |
+| WebSocket                          |    ✅   |
+| Docker Compose                     |    ✅   |
+| 128 MB backend memory limit        |    ✅   |
+| Final cleanup                      |    ✅   |
+
+---
+
+# 🏁 Conclusion
+
+This project demonstrates a complete **fault-tolerant API architecture** with automatic failure detection, intelligent request routing, network chaos testing, service fallback, and automatic recovery.
+
+The combination of:
+
+```text
+Go
++
+Circuit Breaker
++
+Toxiproxy
++
+Primary API
++
+Secondary API
++
+React
++
+WebSocket
++
+Docker Compose
+```
+
+provides a practical demonstration of building resilient backend systems capable of maintaining service availability even when the Primary API experiences latency or failures.
+
+---
+
+## 🔑 Key Takeaway
+
+The system follows the principle:
+
+```text
+Healthy Primary
+      ↓
+Use Primary
+
+Primary Unhealthy
+      ↓
+Open Circuit
+      ↓
+Use Secondary
+
+Primary Recovers
+      ↓
+Half-Open Test
+      ↓
+Return to Primary
+```
+
+This completes the implementation and testing of the fault-tolerant API multiplexer.

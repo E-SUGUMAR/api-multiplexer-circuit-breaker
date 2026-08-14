@@ -1,213 +1,8 @@
-// package main
-
-// import (
-// 	"context"
-// 	"fmt"
-// 	"io"
-// 	"log"
-// 	"net/http"
-// 	"sync"
-// 	"time"
-// )
-
-// const (
-// 	PRIMARY_URL   = "http://localhost:8081"
-// 	SECONDARY_URL = "http://localhost:8082"
-// )
-
-// type CircuitBreaker struct {
-// 	mu           sync.Mutex
-// 	state        string
-// 	failureCount int
-// 	lastFailure  time.Time
-// }
-
-// var cb = &CircuitBreaker{
-// 	state: "CLOSED",
-// }
-
-// var activeRoute = "PRIMARY"
-// var requestCount = 0
-// var requestsPerSecond = 0
-
-// func (cb *CircuitBreaker) shouldUseFallback() bool {
-// 	cb.mu.Lock()
-// 	defer cb.mu.Unlock()
-
-// 	if cb.state == "OPEN" {
-// 		if time.Since(cb.lastFailure) > 5*time.Second {
-// 			cb.state = "HALF-OPEN"
-// 			return false
-// 		}
-// 		return true
-// 	}
-
-// 	return false
-// }
-
-// func (cb *CircuitBreaker) success() {
-// 	cb.mu.Lock()
-// 	defer cb.mu.Unlock()
-
-// 	cb.failureCount = 0
-// 	cb.state = "CLOSED"
-// }
-
-// func (cb *CircuitBreaker) failure() {
-// 	cb.mu.Lock()
-// 	defer cb.mu.Unlock()
-
-// 	cb.failureCount++
-
-// 	if cb.failureCount >= 3 {
-// 		cb.state = "OPEN"
-// 		cb.lastFailure = time.Now()
-// 	}
-// }
-
-// func reverseProxy(target string, w http.ResponseWriter, r *http.Request) error {
-
-// 	ctx, cancel := context.WithTimeout(r.Context(), 200*time.Millisecond)
-// 	defer cancel()
-
-// 	req, err := http.NewRequestWithContext(
-// 		ctx,
-// 		r.Method,
-// 		target+r.URL.Path,
-// 		r.Body,
-// 	)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	req.Header = r.Header.Clone()
-
-// 	client := &http.Client{}
-
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer resp.Body.Close()
-
-// 	for key, values := range resp.Header {
-// 		for _, value := range values {
-// 			w.Header().Add(key, value)
-// 		}
-// 	}
-
-// 	w.WriteHeader(resp.StatusCode)
-
-// 	_, err = io.Copy(w, resp.Body)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }
-
-// func router(w http.ResponseWriter, r *http.Request) {
-
-// 	requestCount++
-
-// 	if cb.shouldUseFallback() {
-
-// 		activeRoute = "SECONDARY"
-
-// 		fmt.Println("Circuit OPEN → Routing to Secondary")
-
-// 		reverseProxy(SECONDARY_URL, w, r)
-
-// 		return
-// 	}
-
-// 	err := reverseProxy(PRIMARY_URL, w, r)
-
-// 	if err != nil {
-
-// 		fmt.Println("Primary Failed")
-
-// 		cb.failure()
-
-// 		activeRoute = "SECONDARY"
-
-// 		err = reverseProxy(SECONDARY_URL, w, r)
-// 		if err != nil {
-// 			http.Error(w, "Both Primary and Secondary APIs are unavailable", http.StatusServiceUnavailable)
-// 			return
-// 		}
-
-// 		return
-// 	}
-// 	activeRoute = "PRIMARY"
-// 	cb.success()
-// }
-
-// func statusHandler(w http.ResponseWriter, r *http.Request) {
-
-// 	requestCount++
-
-// 	w.Header().Set("Content-Type", "application/json")
-
-// 	fmt.Fprintf(w,
-// 		`{
-// 	"circuit":"%s",
-// 	"activeRoute":"%s",
-// 	"requests":%d,
-// 	"rps":%d
-// }`,
-// 		cb.state,
-// 		activeRoute,
-// 		requestCount,
-// 		requestsPerSecond,
-// 	)
-// }
-
-// func enableCORS(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-// 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-// 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-// 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-// 		if r.Method == "OPTIONS" {
-// 			w.WriteHeader(http.StatusOK)
-// 			return
-// 		}
-
-// 		next.ServeHTTP(w, r)
-// 	})
-// }
-
-// func calculateRPS() {
-// 	ticker := time.NewTicker(1 * time.Second)
-
-// 	lastCount := 0
-
-// 	for range ticker.C {
-// 		requestsPerSecond = requestCount - lastCount
-// 		lastCount = requestCount
-// 	}
-// }
-
-// func main() {
-
-// 	http.HandleFunc("/", router)
-// 	http.HandleFunc("/status", statusHandler)
-
-// 	go calculateRPS()
-
-// 	fmt.Println("Backend running on :8080")
-
-// 	handler := enableCORS(http.DefaultServeMux)
-
-// 	log.Fatal(http.ListenAndServe(":8080", handler))
-// }
-
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -215,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -299,6 +96,167 @@ func init() {
 }
 
 // ================================================================
+// WEBSOCKET TELEMETRY
+// ================================================================
+
+type Metrics struct {
+	Circuit     string `json:"circuit"`
+	ActiveRoute string `json:"activeRoute"`
+	Requests    int64  `json:"requests"`
+	RPS         int64  `json:"rps"`
+}
+
+var wsClients = make(map[*websocket.Conn]bool)
+
+var wsMutex sync.Mutex
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		// Allow the React frontend running on localhost:5173.
+		return true
+	},
+}
+
+// getMetrics returns the current dashboard metrics.
+func getMetrics() Metrics {
+
+	return Metrics{
+		Circuit:     cb.getState(),
+		ActiveRoute: activeRoute.Load().(string),
+		Requests:    requestCount.Load(),
+		RPS:         requestsPerSecond.Load(),
+	}
+}
+
+// addWebSocketClient adds a browser WebSocket connection.
+func addWebSocketClient(conn *websocket.Conn) {
+
+	wsMutex.Lock()
+	defer wsMutex.Unlock()
+
+	wsClients[conn] = true
+}
+
+// removeWebSocketClient removes a disconnected browser.
+func removeWebSocketClient(conn *websocket.Conn) {
+
+	wsMutex.Lock()
+	defer wsMutex.Unlock()
+
+	delete(wsClients, conn)
+}
+
+// broadcastMetrics sends the latest metrics
+// to every connected frontend.
+func broadcastMetrics() {
+
+	metrics := getMetrics()
+
+	data, err := json.Marshal(metrics)
+
+	if err != nil {
+		fmt.Println("WebSocket JSON error:", err)
+		return
+	}
+
+	wsMutex.Lock()
+	defer wsMutex.Unlock()
+
+	for conn := range wsClients {
+
+		conn.SetWriteDeadline(
+			time.Now().Add(1 * time.Second),
+		)
+
+		err := conn.WriteMessage(
+			websocket.TextMessage,
+			data,
+		)
+
+		if err != nil {
+
+			fmt.Println(
+				"WebSocket client disconnected:",
+				err,
+			)
+
+			conn.Close()
+
+			delete(wsClients, conn)
+		}
+	}
+}
+
+// websocketHandler upgrades the HTTP connection
+// to a WebSocket connection.
+func websocketHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+
+	conn, err := upgrader.Upgrade(
+		w,
+		r,
+		nil,
+	)
+
+	if err != nil {
+
+		fmt.Println(
+			"WebSocket upgrade failed:",
+			err,
+		)
+
+		return
+	}
+
+	fmt.Println(
+		"WebSocket client connected",
+	)
+
+	addWebSocketClient(conn)
+
+	defer func() {
+
+		removeWebSocketClient(conn)
+
+		conn.Close()
+
+		fmt.Println(
+			"WebSocket client disconnected",
+		)
+
+	}()
+
+	// Keep reading from the browser so that
+	// WebSocket close/ping messages are handled.
+	for {
+
+		_, _, err := conn.ReadMessage()
+
+		if err != nil {
+			return
+		}
+	}
+}
+
+// startWebSocketBroadcaster continuously sends
+// telemetry to connected clients.
+func startWebSocketBroadcaster() {
+
+	ticker := time.NewTicker(
+		100 * time.Millisecond,
+	)
+
+	defer ticker.Stop()
+
+	for range ticker.C {
+
+		broadcastMetrics()
+	}
+}
+
+// ================================================================
 // CIRCUIT BREAKER - CHECK FALLBACK
 // ================================================================
 
@@ -329,39 +287,6 @@ func (cb *CircuitBreaker) shouldUseFallback() bool {
 	return false
 }
 
-// func (cb *CircuitBreaker) shouldUseFallback() bool {
-
-// 	cb.mu.Lock()
-// 	defer cb.mu.Unlock()
-
-// 	// ------------------------------------------------------------
-// 	// Circuit is OPEN
-// 	// ------------------------------------------------------------
-
-// 	if cb.state == "OPEN" {
-
-// 		// After 5 seconds, move to HALF-OPEN.
-// 		if time.Since(cb.lastFailure) >= RECOVERY_TIMEOUT {
-
-// 			cb.state = "HALF-OPEN"
-
-// 			fmt.Println(
-// 				"Circuit OPEN timeout expired → HALF-OPEN",
-// 			)
-
-// 			// Allow one request to test Primary.
-// 			return false
-// 		}
-
-// 		// Still OPEN.
-// 		// Do not send traffic to Primary.
-// 		return true
-// 	}
-
-// 	// CLOSED or HALF-OPEN
-// 	return false
-// }
-
 // ================================================================
 // CIRCUIT BREAKER - SUCCESS
 // ================================================================
@@ -383,33 +308,6 @@ func (cb *CircuitBreaker) success() {
 // ================================================================
 // CIRCUIT BREAKER - FAILURE
 // ================================================================
-
-// func (cb *CircuitBreaker) failure() {
-
-// 	cb.mu.Lock()
-// 	defer cb.mu.Unlock()
-
-// 	cb.failureCount++
-
-// 	fmt.Printf(
-// 		"Primary failure count: %d/%d\n",
-// 		cb.failureCount,
-// 		FAILURE_THRESHOLD,
-// 	)
-
-// 	// Open circuit after threshold is reached.
-
-// 	if cb.failureCount >= FAILURE_THRESHOLD {
-
-// 		cb.state = "OPEN"
-
-// 		cb.lastFailure = time.Now()
-
-// 		fmt.Println(
-// 			"Circuit Breaker → OPEN",
-// 		)
-// 	}
-// }
 
 func (cb *CircuitBreaker) failure() {
 	cb.mu.Lock()
@@ -832,11 +730,22 @@ func main() {
 		statusHandler,
 	)
 
+	http.HandleFunc(
+		"/ws",
+		websocketHandler,
+	)
+
 	// ------------------------------------------------------------
 	// Start RPS calculation
 	// ------------------------------------------------------------
 
 	go calculateRPS()
+
+	// ------------------------------------------------------------
+	// Start WebSocket telemetry
+	// ------------------------------------------------------------
+
+	go startWebSocketBroadcaster()
 
 	// ------------------------------------------------------------
 	// Start backend

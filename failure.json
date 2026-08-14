@@ -1,0 +1,8 @@
+{
+  "name": "connection_failure",
+  "type": "timeout",
+  "attributes": {
+    "timeout": 1000
+  },
+  "toxicity": 0.2
+}
